@@ -10,9 +10,7 @@ accts = beaker.sandbox.get_accounts()
 acct = accts.pop()
 algod = beaker.sandbox.get_algod_client()
 
-app_client = beaker.client.ApplicationClient(
-    algod, app_spec, signer=acct.signer
-)
+app_client = beaker.client.ApplicationClient(algod, app_spec, signer=acct.signer)
 
 # Only create the app once
 if app_id := os.getenv("PC_APP_ID") is not None:
@@ -22,8 +20,9 @@ else:
     os.environ["PC_APP_ID"] = str(created_id)
 
 
-
 class State(pc.State):
+    app_id: int = app_client.app_id
+
     @pc.var
     def count(self):
         return app_client.get_global_state().get("count", 0)
@@ -35,21 +34,29 @@ class State(pc.State):
         app_client.call("decrement")
 
 
+dapp_flow = (
+    f"https://app.dappflow.org/explorer/application/{app_client.app_id}/transactions"
+)
+
+
 def index():
-    return pc.hstack(
-        pc.button(
-            "Decrement",
-            color_scheme="red",
-            border_radius="1em",
-            on_click=State.decrement,
+    return pc.vstack(
+        pc.hstack(
+            pc.button(
+                "Decrement",
+                color_scheme="red",
+                border_radius="1em",
+                on_click=State.decrement,
+            ),
+            pc.heading(State.count, font_size="2em"),
+            pc.button(
+                "Increment",
+                color_scheme="green",
+                border_radius="1em",
+                on_click=State.increment,
+            ),
         ),
-        pc.heading(State.count, font_size="2em"),
-        pc.button(
-            "Increment",
-            color_scheme="green",
-            border_radius="1em",
-            on_click=State.increment,
-        ),
+        pc.link("DappFlow", href=dapp_flow, is_external=True),
     )
 
 
