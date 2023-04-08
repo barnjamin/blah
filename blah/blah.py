@@ -38,6 +38,8 @@ def method_caller(method_name: str) -> Callable:
 
 fields: dict = {}
 for method in app_spec.contract.methods:
+    if method.name == "create":
+        continue
     meth = method_caller(method.name)
     meth.__name__ = method.name
     meth.__qualname__ = method.name
@@ -53,23 +55,27 @@ dapp_flow = (
     f"https://app.dappflow.org/explorer/application/{app_client.app_id}/transactions"
 )
 
+buttons = []
+for method in app_spec.contract.methods:
+    if method.name == "create":
+        continue
+    buttons.append(
+        pc.button(
+            method.name,
+            border_radius="1em",
+            on_click=getattr(State, method.name),
+        )
+    )
+
+statevals = []
+for k, v in app_spec.schema["global"]["declared"].items():
+    statevals.append(pc.heading(getattr(State, k), font_size="2em"))
 
 def index():
     return pc.vstack(
         pc.hstack(
-            pc.button(
-                "Decrement",
-                color_scheme="red",
-                border_radius="1em",
-                on_click=State.decrement,
-            ),
-            pc.heading(State.count, font_size="2em"),
-            pc.button(
-                "Increment",
-                color_scheme="green",
-                border_radius="1em",
-                on_click=State.increment,
-            ),
+            *statevals,
+            *buttons
         ),
         pc.link("DappFlow", href=dapp_flow, is_external=True),
     )
