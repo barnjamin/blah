@@ -1,0 +1,82 @@
+#pragma version 8
+intcblock 0 1
+bytecblock 0x636f756e74
+txna ApplicationArgs 0
+pushbytes 0x4c5c61ba // "create()void"
+==
+bnz main_l6
+txna ApplicationArgs 0
+pushbytes 0x2fa47328 // "increment()void"
+==
+bnz main_l5
+txna ApplicationArgs 0
+pushbytes 0x4b5bddfd // "decrement()void"
+==
+bnz main_l4
+err
+main_l4:
+txn OnCompletion
+intc_0 // NoOp
+==
+txn ApplicationID
+intc_0 // 0
+!=
+&&
+assert
+callsub decrement_2
+intc_1 // 1
+return
+main_l5:
+txn OnCompletion
+intc_0 // NoOp
+==
+txn ApplicationID
+intc_0 // 0
+!=
+&&
+assert
+callsub increment_1
+intc_1 // 1
+return
+main_l6:
+txn OnCompletion
+intc_0 // NoOp
+==
+txn ApplicationID
+intc_0 // 0
+==
+&&
+assert
+callsub create_0
+intc_1 // 1
+return
+
+// create
+create_0:
+proto 0 0
+bytec_0 // "count"
+intc_0 // 0
+app_global_put
+retsub
+
+// increment
+increment_1:
+proto 0 0
+bytec_0 // "count"
+bytec_0 // "count"
+app_global_get
+intc_1 // 1
++
+app_global_put
+retsub
+
+// decrement
+decrement_2:
+proto 0 0
+bytec_0 // "count"
+bytec_0 // "count"
+app_global_get
+intc_1 // 1
+-
+app_global_put
+retsub

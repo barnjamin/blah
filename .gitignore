@@ -1,0 +1,4 @@
+pynecone.db
+.web
+.venv
+__pycache__
