@@ -1,3 +1,4 @@
+from typing import Callable
 import beaker
 import os
 import algokit_utils as au
@@ -20,18 +21,32 @@ else:
     os.environ["PC_APP_ID"] = str(created_id)
 
 
-class State(pc.State):
-    app_id: int = app_client.app_id
+def variable_getter(key: str, default_value) -> pc.Var:
+    def _variable_getter(self):
+        return app_client.get_global_state().get(key, default_value)
 
-    @pc.var
-    def count(self):
-        return app_client.get_global_state().get("count", 0)
+    _variable_getter.__name__ = key
+    return pc.var(_variable_getter)
 
-    def increment(self):
-        app_client.call("increment")
 
-    def decrement(self):
-        app_client.call("decrement")
+def method_caller(method_name: str) -> Callable:
+    def _method_caller(self):
+        app_client.call(method_name)
+
+    return _method_caller
+
+
+fields: dict = {}
+for method in app_spec.contract.methods:
+    meth = method_caller(method.name)
+    meth.__name__ = method.name
+    meth.__qualname__ = method.name
+    fields[method.name] = meth
+
+for k, v in app_spec.schema["global"]["declared"].items():
+    fields[k] = variable_getter(key=k, default_value=0 if v["type"] == "uint64" else "")
+
+State = type("State", (pc.State,), fields)
 
 
 dapp_flow = (
