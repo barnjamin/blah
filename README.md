@@ -15,6 +15,8 @@ Open http://localhost:3000 and click buttons
 
 Click the `DappFlow` link to see the app in dappflow and find that the global state value matches 
 
+![viz](uggo.jpg)
+
 # TODO
 
 - [ ] Autogenerate the `State` class from the app spec
