@@ -1,17 +1,48 @@
-import functools
+import json
 from typing import Callable, cast
 import beaker
+import functools
 import os
 import algokit_utils as au
-import algosdk
+from algosdk import transaction
+from algosdk.atomic_transaction_composer import (
+    TransactionSigner,
+    AtomicTransactionComposer,
+)
 import pynecone as pc
+
+
+class TxnVar(pc.Base):
+    sender: str = ""
+    receiver: str = ""
+    amount: int = 0
+    asset_id: int = 0
 
 
 def method_caller(
     app_client: beaker.client.ApplicationClient, method_name: str
 ) -> Callable:
-    def _method_caller(_self, *args, **kwargs):
-        app_client.call(method_name, *args, **kwargs)
+    def _method_caller(_self):
+        state_dict = _self.dict()
+        args: dict = {}
+
+        for sk, sv in state_dict.items():
+            if sk.startswith(method_name):
+                args = sv
+
+        prepared_args = {}
+        method = app_client._app_client.app_spec.contract.get_method_by_name(method_name)
+        for expected_args in method.args:
+            if expected_args.name not in args:
+                raise ValueError(
+                    f"Missing argument {expected_args.name} for method {method_name}"
+                )
+
+            if str(expected_args.type) == "uint64":
+                prepared_args[expected_args.name] = int(args[expected_args.name])
+
+        result = app_client.call(method_name, **prepared_args)
+        print(result.return_value)
 
     _method_caller.__name__ = method_name
     _method_caller.__qualname__ = method_name
@@ -36,17 +67,21 @@ class PCApp:
     def __init__(
         self, app_client: beaker.client.ApplicationClient, auto_create: bool = True
     ):
-        self.account = (app_client.sender, app_client.signer)
+        self.sender: str = app_client.get_sender()
+        self.signer: TransactionSigner = app_client.get_signer()
+
         self.app_client = app_client
         self.app_spec = app_client._app_client.app_spec
 
+        env_name = f"{self.app_spec.contract.name}_APP_ID"
         if self.app_client.app_id == 0:
-            if env_app_id := os.getenv("PC_APP_ID") is not None:
+            if env_app_id := os.getenv(env_name) is not None:
                 self.app_client.app_id = int(env_app_id)
-            elif auto_create:
-                app_id, _, _ = self.app_client.create()
-                app_client.app_id = app_id
-                os.environ["PC_APP_ID"] = str(app_id)
+
+        if auto_create:
+            app_id, _, _ = self.app_client.create()
+            self.app_client.app_id = app_id
+            os.environ[env_name] = str(app_id)
 
     @staticmethod
     def from_app_spec(path: str, app_id: int = 0) -> "PCApp":
@@ -79,32 +114,65 @@ class PCApp:
         return fields
 
     def get_actions(self, ctx: type[pc.State]) -> list[dict]:
+        """Generate a list of action components and their associated state.
+        Used to call methods on the app and update the state.
+
+        Args:
+            ctx (type[pc.State]): The state class to use for the action
+
+        Returns:
+            list[dict]: A list of action components and their associated state
+        """
+
         actions = []
         for method in pcap.app_spec.contract.methods:
             if method.name == "create":
                 continue
 
             MethodState = type(f"{method.name}MethodState", (ctx,), {})
-            MethodState.args: list[tuple[str, str]] = [  # type: ignore
-                (a.name, a.type) for a in method.args
-            ]
 
-            def tx_input(arg: tuple[str, str]):
-                # If i try to index into this, it says it is any and not indexable
-                # idk where to apply the annotation to get it to work
-                return pc.text(arg)
+            arg_values: dict = {}
+            arg_inputs = []
+            for arg in method.args:
+                if arg.name is None:
+                    continue
+                if arg.type is None:
+                    continue
 
-            args = pc.foreach(getattr(MethodState, "args"), tx_input)
+                MethodState.add_var(arg.name, int, 0)  # type: ignore
 
-            # send_tx = functools.partial(getattr(AppState, method.name), )
-            print(method.name)
+                arg_inputs.append(
+                    pc.number_input(
+                        default_value=getattr(MethodState, arg.name),
+                        on_change=getattr(MethodState, f"set_{arg.name}"),
+                    )
+                )
+                arg_values[arg.name] = getattr(MethodState, arg.name)
+
+                # if str(arg.type) in ("pay", "axfer"):
+                #    MethodState.add_var(
+                #        arg.name,
+                #        TxnVar,
+                #        TxnVar(
+                #            sender=self.sender,
+                #            receiver=self.sender,
+                #            amount=0,
+                #            asset_id=0,
+                #        ),
+                #    )
+
+                #    args.append(
+                #        pc.number_input(
+                #            default_value=getattr(MethodState, arg.name).amount,
+                #        )
+                #    )
 
             action = pc.hstack(
-                pc.responsive_grid(args, columns=[2, 3]),
+                *arg_inputs,
                 pc.button(
                     method.name,
                     border_radius="1em",
-                    # on_click=send_tx,
+                    on_click=getattr(AppState, method.name),
                 ),
             )
 
@@ -129,9 +197,12 @@ class PCApp:
         return f"https://app.dappflow.org/explorer/application/{self.app_client.app_id}/transactions"
 
 
-## p = "blah/application/artifacts/application.json"
-p = "/home/ben/beaker/examples/amm/ConstantProductAMM.artifacts/application.json"
-pcap = PCApp.from_app_spec(p)
+counter_path = "blah/application/artifacts/application.json"
+amm_path = "/home/ben/beaker/examples/amm/ConstantProductAMM.artifacts/application.json"
+calculator_path = (
+    "/home/ben/beaker/examples/simple/Calculator.artifacts/application.json"
+)
+pcap = PCApp.from_app_spec(calculator_path)
 AppState = pcap.app_state()
 
 
@@ -142,18 +213,6 @@ def index():
         pc.link("DappFlow", href=pcap.dapp_flow(), is_external=True),
     )
 
-
-# class State(pc.State):
-#    x: int = 123
-#
-# class ChildState(State):
-#    x: int = 456
-#
-
-# def index():
-#    return pc.vstack(
-#        pc.heading(ChildState.x, font_size="2em"),
-#    )
 
 app = pc.App(state=AppState)
 app.add_page(index)
