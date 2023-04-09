@@ -1,5 +1,5 @@
 import functools
-from typing import Callable
+from typing import Callable, cast
 import beaker
 import os
 import algokit_utils as au
@@ -61,7 +61,7 @@ class PCApp:
 
     def app_state(self) -> type[pc.State]:
         fields = pcap.get_states() | pcap.get_action_states()
-        return type("ok", (pc.State,), fields)
+        return type("AppState", (pc.State,), fields)
 
     def get_states(self) -> dict:
         fields: dict = {}
@@ -78,38 +78,33 @@ class PCApp:
 
         return fields
 
-    def get_actions(self, ctx: type[pc.State]) -> list:
+    def get_actions(self, ctx: type[pc.State]) -> list[dict]:
         actions = []
         for method in pcap.app_spec.contract.methods:
             if method.name == "create":
-               continue
+                continue
 
-            args_key = f"{method.name}.args"
-            fields = {
-               args_key: [a.dictify() for a in method.args],
-            }
+            MethodState = type(f"{method.name}MethodState", (ctx,), {})
+            MethodState.args: list[tuple[str, str]] = [  # type: ignore
+                (a.name, a.type) for a in method.args
+            ]
 
-            MethodState = type("MethodState", (ctx,), fields)
+            def tx_input(arg: tuple[str, str]):
+                # If i try to index into this, it says it is any and not indexable
+                # idk where to apply the annotation to get it to work
+                return pc.text(arg)
 
-            def tx_input(arg):
-                print(arg.__dict__)
-                return pc.input(
-                        placeholder=arg["name"],
-                        #_type= "int" if str(arg.type) == "uint64" else "str",
-                        width="100%",
-                        outline="black",
-                    )
+            args = pc.foreach(getattr(MethodState, "args"), tx_input)
 
-            args = pc.foreach(getattr(MethodState, args_key), tx_input)
+            # send_tx = functools.partial(getattr(AppState, method.name), )
+            print(method.name)
 
-            send_tx = functools.partial(getattr(AppState, method.name), )
-            
             action = pc.hstack(
-                args,
+                pc.responsive_grid(args, columns=[2, 3]),
                 pc.button(
                     method.name,
                     border_radius="1em",
-                    on_click=send_tx,
+                    # on_click=send_tx,
                 ),
             )
 
@@ -139,6 +134,7 @@ p = "/home/ben/beaker/examples/amm/ConstantProductAMM.artifacts/application.json
 pcap = PCApp.from_app_spec(p)
 AppState = pcap.app_state()
 
+
 def index():
     return pc.vstack(
         *pcap.get_actions(AppState),
@@ -146,14 +142,15 @@ def index():
         pc.link("DappFlow", href=pcap.dapp_flow(), is_external=True),
     )
 
-#class State(pc.State):
+
+# class State(pc.State):
 #    x: int = 123
 #
-#class ChildState(State):
+# class ChildState(State):
 #    x: int = 456
 #
 
-#def index():
+# def index():
 #    return pc.vstack(
 #        pc.heading(ChildState.x, font_size="2em"),
 #    )
