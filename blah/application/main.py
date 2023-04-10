@@ -1,5 +1,5 @@
 import beaker
-import application as app
+import application as app  # type: ignore
 
 
 def main() -> None:

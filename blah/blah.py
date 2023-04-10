@@ -23,7 +23,9 @@ def index():
             border_width="thin",
             padding=5,
         ),
-        pc.box(element="iframe", src=pcap.dapp_flow(), width="100%", height="800px"),
+        pc.box(
+            element="iframe", src=pcap.dapp_flow_url(), width="100%", height="800px"
+        ),
     )
 
 

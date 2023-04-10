@@ -125,17 +125,11 @@ class PCApp:
 
         return states
 
-    def get_global_state_fields(self) -> dict:
-        fields: dict = {}
+    def get_global_state_fields(self) -> dict[str, pc.Var]:
+        fields: dict[str, pc.Var] = {}
         for k, v in self.app_spec.schema["global"]["declared"].items():
             fields[k] = state_val_getter(self.app_client, k, v)
         return fields
-
-    def get_local_state_fields(self) -> list:
-        local_state = []
-        for k, v in self.app_spec.schema["local"]["declared"].items():
-            local_state.append(pc.heading(getattr(self.AppState, k), font_size="2em"))
-        return local_state
 
     def render_actions(self) -> list[pc.Component]:
         actions = []
@@ -189,7 +183,7 @@ class PCApp:
             global_state.append(gsv)
         return global_state
 
-    def dapp_flow(self):
+    def dapp_flow_url(self) -> str:
         return (
             "https://app.dappflow.org/explorer/"
             f"application/{self.app_client.app_id}/transactions"
