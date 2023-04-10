@@ -72,6 +72,7 @@ class PCApp:
         self.app_spec = app_client._app_client.app_spec
 
         self.AppState = self.app_state()
+        self.action_states = self.get_action_states()
 
         env_name = f"{self.app_spec.contract.name}_APP_ID"
         if self.app_client.app_id == 0:
@@ -95,27 +96,11 @@ class PCApp:
         return PCApp(app_client)
 
     def app_state(self) -> type[pc.State]:
-        fields = self.get_states()
+        fields = self.get_global_state_fields()
         return type("AppState", (pc.State,), fields)
 
-    def get_states(self) -> dict:
-        fields: dict = {}
-        for k, v in self.app_spec.schema["global"]["declared"].items():
-            fields[k] = state_val_getter(self.app_client, k, v)
-        return fields
-
-    def get_actions(self) -> list[dict]:
-        """Generate a list of action components and their associated state.
-        Used to call methods on the app and update the state.
-
-        Args:
-            ctx (type[pc.State]): The state class to use for the action
-
-        Returns:
-            list[dict]: A list of action components and their associated state
-        """
-
-        actions = []
+    def get_action_states(self) -> dict[str, type[pc.State]]:
+        states: dict[str, type[pc.State]] = {}
         for method in self.app_spec.contract.methods:
             if method.name == "create":
                 continue
@@ -125,7 +110,6 @@ class PCApp:
             }
             MethodState = type(f"{method.name}", (self.AppState,), fields)
 
-            arg_inputs = []
             for arg in method.args:
                 if arg.name is None:
                     continue
@@ -134,6 +118,34 @@ class PCApp:
 
                 MethodState.add_var(arg.name, int, 0)  # type: ignore
 
+            if method.returns is not None:
+                MethodState.add_var("result", str, "not called")  # type: ignore
+
+            states[method.name] = MethodState
+
+        return states
+
+    def get_global_state_fields(self) -> dict:
+        fields: dict = {}
+        for k, v in self.app_spec.schema["global"]["declared"].items():
+            fields[k] = state_val_getter(self.app_client, k, v)
+        return fields
+
+    def render_actions(self) -> list[pc.Component]:
+        actions = []
+        for method in self.app_spec.contract.methods:
+            if method.name == "create":
+                continue
+
+            MethodState = self.action_states[method.name]
+
+            arg_inputs = []
+            for arg in method.args:
+                if arg.name is None:
+                    continue
+                if arg.type is None:
+                    continue
+
                 arg_inputs.append(
                     pc.number_input(
                         default_value=getattr(MethodState, arg.name),
@@ -141,26 +153,7 @@ class PCApp:
                     )
                 )
 
-                # if str(arg.type) in ("pay", "axfer"):
-                #    MethodState.add_var(
-                #        arg.name,
-                #        TxnVar,
-                #        TxnVar(
-                #            sender=self.sender,
-                #            receiver=self.sender,
-                #            amount=0,
-                #            asset_id=0,
-                #        ),
-                #    )
-
-                #    args.append(
-                #        pc.number_input(
-                #            default_value=getattr(MethodState, arg.name).amount,
-                #        )
-                #    )
-
             if method.returns is not None:
-                MethodState.add_var("result", str, "not called")  # type: ignore
                 arg_inputs.append(
                     pc.box(
                         pc.text(getattr(MethodState, "result")),
@@ -182,7 +175,7 @@ class PCApp:
             actions.append(action)
         return actions
 
-    def get_global_state(self) -> list:
+    def render_global_state(self) -> list[pc.Component]:
         global_state = []
         for k, v in self.app_spec.schema["global"]["declared"].items():
             gsv = pc.heading(f"{k} | " + getattr(self.AppState, k), font_size="2em")

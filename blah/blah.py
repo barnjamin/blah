@@ -15,8 +15,8 @@ def index():
     return pc.vstack(
         pc.box(
             pc.vstack(
-                *pcap.get_actions(),
-                *pcap.get_global_state(),
+                *pcap.render_actions(),
+                *pcap.render_global_state(),
             ),
             bg="lightgreen",
             border_radius="15px",
