@@ -1,4 +1,5 @@
 import ast
+import pathlib
 import beaker
 import algokit_utils as au
 import pynecone as pc
@@ -86,3 +87,14 @@ class PyneconeStateCodeGen:
             app_spec = au.ApplicationSpecification.from_json(f.read())
 
         return cls(app_spec)
+
+
+# relative to root where `pc run` is called
+counter_path = "blah/application/artifacts/application.json"
+
+specs = pathlib.Path("blah/specs")
+amm_path = specs / "amm.json"
+calculator_path = specs / "calculator.json"
+
+pcsg = PyneconeStateCodeGen.from_app_spec_path(str(calculator_path))
+print(pcsg.src())

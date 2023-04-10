@@ -1,8 +1,8 @@
-from typing import Callable, cast
+from typing import Callable
 import beaker
 import os
 import algokit_utils as au
-from algosdk import transaction
+from algosdk import transaction, abi
 from algosdk.atomic_transaction_composer import (
     TransactionSigner,
     AtomicTransactionComposer,
@@ -20,58 +20,28 @@ class TxnVar(pc.Base):
 def method_caller(
     app_client: beaker.client.ApplicationClient, method_name: str
 ) -> Callable:
-    def _method_caller(_self):
-        return pc.window_alert("Hello world")
-        for ss in _self.get_substates():
-            if ss.get_name() == method_name:
-                print(ss)
-                print(dir(ss))
-                print(ss.__dict__)
+    method = app_client._app_client.app_spec.contract.get_method_by_name(method_name)
 
-                print(_self)
-                print(dir(_self))
-                print(_self.__dict__)
+    def _method_caller(_self: pc.State):
+        state = _self.substates[method_name]
+        args = state.dict()
+        prepared_args = {}
+        for expected_args in method.args:
+            if expected_args.name not in args:
+                raise ValueError(
+                    f"Missing argument {expected_args.name} for method {method_name}"
+                )
 
-                # _self.set__result(123)
-                _self._result = 123
-                print(_self.backend_vars)
-                _self.mark_dirty()
-                print(_self.__dict__)
+            match expected_args.type:
+                case abi.UintType():
+                    prepared_args[expected_args.name] = int(args[expected_args.name])
+                case abi.ByteType():
+                    pass
+                case _:
+                    pass
 
-        # prepared_args = {}
-        # method = app_client._app_client.app_spec.contract.get_method_by_name(
-        #    method_name
-        # )
-        # for expected_args in method.args:
-        #    if expected_args.name not in args:
-        #        raise ValueError(
-        #            f"Missing argument {expected_args.name} for method {method_name}"
-        #        )
-
-        #    if str(expected_args.type) == "uint64":
-        #        prepared_args[expected_args.name] = int(args[expected_args.name])
-
-        # result = app_client.call(method_name, **prepared_args)
-
-        # for ss in _self.get_substates():
-        #    if ss.get_name() == method_name:
-        #        print("Setting result")
-        #        print(ss._result)
-        #        print(result.return_value)
-        #        print(ss)
-        #        print(dir(ss))
-        #        print(ss.__dict__)
-
-        #        ss.result = result.return_value
-        #        _self.mark_dirty()
-        #    #_self.set_result(str(result.return_value))
-
-        # _self.get_substate(method_name).set_result(result.return_value)
-        # print(_self)
-        # print(dir(_self))
-        # print(_self.__dict__)
-        # getattr(_self, f"{method_name}").set_result(result.return_value)
-        # print(result.return_value)
+        result = app_client.call(method_name, **prepared_args)  # type: ignore
+        state.result = result.return_value
 
     _method_caller.__name__ = f"{method_name}_call"
     _method_caller.__qualname__ = f"{method_name}_call"
@@ -191,10 +161,10 @@ class PCApp:
                 #    )
 
             if method.returns is not None:
-                MethodState.add_var("_result", str, "not called")  # type: ignore
+                MethodState.add_var("result", str, "not called")  # type: ignore
                 arg_inputs.append(
                     pc.box(
-                        pc.text(getattr(MethodState, "_result")),
+                        pc.text(getattr(MethodState, "result")),
                         border_radius="1em",
                         bg="gray",
                         border_color="black",
