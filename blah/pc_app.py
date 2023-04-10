@@ -1,7 +1,5 @@
-import json
 from typing import Callable, cast
 import beaker
-import functools
 import os
 import algokit_utils as au
 from algosdk import transaction
@@ -23,31 +21,60 @@ def method_caller(
     app_client: beaker.client.ApplicationClient, method_name: str
 ) -> Callable:
     def _method_caller(_self):
-        state_dict = _self.dict()
-        args: dict = {}
+        return pc.window_alert("Hello world")
+        for ss in _self.get_substates():
+            if ss.get_name() == method_name:
+                print(ss)
+                print(dir(ss))
+                print(ss.__dict__)
 
-        for sk, sv in state_dict.items():
-            if sk.startswith(method_name):
-                args = sv
+                print(_self)
+                print(dir(_self))
+                print(_self.__dict__)
 
-        prepared_args = {}
-        method = app_client._app_client.app_spec.contract.get_method_by_name(
-            method_name
-        )
-        for expected_args in method.args:
-            if expected_args.name not in args:
-                raise ValueError(
-                    f"Missing argument {expected_args.name} for method {method_name}"
-                )
+                # _self.set__result(123)
+                _self._result = 123
+                print(_self.backend_vars)
+                _self.mark_dirty()
+                print(_self.__dict__)
 
-            if str(expected_args.type) == "uint64":
-                prepared_args[expected_args.name] = int(args[expected_args.name])
+        # prepared_args = {}
+        # method = app_client._app_client.app_spec.contract.get_method_by_name(
+        #    method_name
+        # )
+        # for expected_args in method.args:
+        #    if expected_args.name not in args:
+        #        raise ValueError(
+        #            f"Missing argument {expected_args.name} for method {method_name}"
+        #        )
 
-        result = app_client.call(method_name, **prepared_args)
-        print(result.return_value)
+        #    if str(expected_args.type) == "uint64":
+        #        prepared_args[expected_args.name] = int(args[expected_args.name])
 
-    _method_caller.__name__ = method_name
-    _method_caller.__qualname__ = method_name
+        # result = app_client.call(method_name, **prepared_args)
+
+        # for ss in _self.get_substates():
+        #    if ss.get_name() == method_name:
+        #        print("Setting result")
+        #        print(ss._result)
+        #        print(result.return_value)
+        #        print(ss)
+        #        print(dir(ss))
+        #        print(ss.__dict__)
+
+        #        ss.result = result.return_value
+        #        _self.mark_dirty()
+        #    #_self.set_result(str(result.return_value))
+
+        # _self.get_substate(method_name).set_result(result.return_value)
+        # print(_self)
+        # print(dir(_self))
+        # print(_self.__dict__)
+        # getattr(_self, f"{method_name}").set_result(result.return_value)
+        # print(result.return_value)
+
+    _method_caller.__name__ = f"{method_name}_call"
+    _method_caller.__qualname__ = f"{method_name}_call"
     return _method_caller
 
 
@@ -99,22 +126,13 @@ class PCApp:
         return PCApp(app_client)
 
     def app_state(self) -> type[pc.State]:
-        fields = self.get_states() | self.get_action_states()
+        fields = self.get_states()
         return type("AppState", (pc.State,), fields)
 
     def get_states(self) -> dict:
         fields: dict = {}
         for k, v in self.app_spec.schema["global"]["declared"].items():
             fields[k] = state_val_getter(self.app_client, k, v)
-        return fields
-
-    def get_action_states(self) -> dict:
-        fields: dict = {}
-        for method in self.app_spec.contract.methods:
-            if method.name == "create":
-                continue
-            fields[method.name] = method_caller(self.app_client, method.name)
-
         return fields
 
     def get_actions(self) -> list[dict]:
@@ -133,7 +151,10 @@ class PCApp:
             if method.name == "create":
                 continue
 
-            MethodState = type(f"{method.name}MethodState", (self.AppState,), {})
+            fields = {
+                f"{method.name}_call": method_caller(self.app_client, method.name)
+            }
+            MethodState = type(f"{method.name}", (self.AppState,), fields)
 
             arg_inputs = []
             for arg in method.args:
@@ -170,11 +191,12 @@ class PCApp:
                 #    )
 
             if method.returns is not None:
-                MethodState.add_var("result", str, "VOID")  # type: ignore
+                MethodState.add_var("_result", str, "not called")  # type: ignore
                 arg_inputs.append(
                     pc.box(
-                        pc.text(getattr(MethodState, "result")),
+                        pc.text(getattr(MethodState, "_result")),
                         border_radius="1em",
+                        bg="gray",
                         border_color="black",
                     )
                 )
@@ -184,7 +206,7 @@ class PCApp:
                 pc.button(
                     method.name,
                     border_radius="1em",
-                    on_click=getattr(self.AppState, method.name),
+                    on_click=getattr(MethodState, f"{method.name}_call"),
                 ),
             )
 
