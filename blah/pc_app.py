@@ -1,11 +1,10 @@
-from typing import Callable
+from typing import Callable, Any
 import beaker
 import os
 import algokit_utils as au
-from algosdk import transaction, abi
+from algosdk import abi
 from algosdk.atomic_transaction_composer import (
     TransactionSigner,
-    AtomicTransactionComposer,
 )
 import pynecone as pc
 
@@ -25,7 +24,7 @@ def method_caller(
     def _method_caller(_self: pc.State):
         state = _self.substates[method_name]
         args = state.dict()
-        prepared_args = {}
+        prepared_args: dict[str, Any] = {}
         for expected_args in method.args:
             if expected_args.name not in args:
                 raise ValueError(
@@ -35,8 +34,8 @@ def method_caller(
             match expected_args.type:
                 case abi.UintType():
                     prepared_args[expected_args.name] = int(args[expected_args.name])
-                case abi.ByteType():
-                    pass
+                case abi.StringType():
+                    prepared_args[expected_args.name] = str(args[expected_args.name])
                 case _:
                     pass
 
@@ -198,4 +197,7 @@ class PCApp:
         return local_state
 
     def dapp_flow(self):
-        return f"https://app.dappflow.org/explorer/application/{self.app_client.app_id}/transactions"
+        return (
+            "https://app.dappflow.org/explorer/"
+            f"application/{self.app_client.app_id}/transactions"
+        )

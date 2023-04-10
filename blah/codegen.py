@@ -1,8 +1,10 @@
 import ast
 import pathlib
-import beaker
 import algokit_utils as au
-import pynecone as pc
+
+# In case the dynamic generation of State types doesnt work out
+# we could try generating the classes in a new file given
+# the app spec
 
 
 class PyneconeStateCodeGen:
