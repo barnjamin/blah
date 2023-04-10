@@ -76,16 +76,16 @@ class PCApp:
 
         env_name = f"{self.app_spec.contract.name}_APP_ID"
         if self.app_client.app_id == 0:
-            if env_app_id := os.getenv(env_name) is not None:
+            if (env_app_id := os.getenv(env_name)) is not None:
                 self.app_client.app_id = int(env_app_id)
 
-        if auto_create:
+        if auto_create and self.app_client.app_id == 0:
             app_id, _, _ = self.app_client.create()
             self.app_client.app_id = app_id
             os.environ[env_name] = str(app_id)
 
-    @staticmethod
-    def from_app_spec(path: str, app_id: int = 0) -> "PCApp":
+    @classmethod
+    def from_app_spec(cls, path: str, app_id: int = 0) -> "PCApp":
         with open(path) as f:
             app_spec = au.ApplicationSpecification.from_json(f.read())
         acct = beaker.sandbox.get_accounts().pop()
@@ -93,7 +93,7 @@ class PCApp:
         app_client = beaker.client.ApplicationClient(
             algod, app_spec, signer=acct.signer, app_id=app_id
         )
-        return PCApp(app_client)
+        return cls(app_client)
 
     def app_state(self) -> type[pc.State]:
         fields = self.get_global_state_fields()
@@ -130,6 +130,12 @@ class PCApp:
         for k, v in self.app_spec.schema["global"]["declared"].items():
             fields[k] = state_val_getter(self.app_client, k, v)
         return fields
+
+    def get_local_state_fields(self) -> list:
+        local_state = []
+        for k, v in self.app_spec.schema["local"]["declared"].items():
+            local_state.append(pc.heading(getattr(self.AppState, k), font_size="2em"))
+        return local_state
 
     def render_actions(self) -> list[pc.Component]:
         actions = []
@@ -182,12 +188,6 @@ class PCApp:
 
             global_state.append(gsv)
         return global_state
-
-    def get_local_state(self) -> list:
-        local_state = []
-        for k, v in self.app_spec.schema["local"]["declared"].items():
-            local_state.append(pc.heading(getattr(self.AppState, k), font_size="2em"))
-        return local_state
 
     def dapp_flow(self):
         return (
