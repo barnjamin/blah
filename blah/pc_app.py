@@ -119,7 +119,7 @@ class PCApp:
                 MethodState.add_var(arg.name, int, 0)  # type: ignore
 
             if method.returns is not None:
-                MethodState.add_var("result", str, "not called")  # type: ignore
+                MethodState.add_var("result", str, "")  # type: ignore
 
             states[method.name] = MethodState
 
@@ -146,30 +146,50 @@ class PCApp:
                 if arg.type is None:
                     continue
 
-                arg_inputs.append(
-                    pc.number_input(
-                        default_value=getattr(MethodState, arg.name),
-                        on_change=getattr(MethodState, f"set_{arg.name}"),
-                    )
-                )
+                match arg.type:
+                    case abi.UintType():
+                        arg_inputs.append(
+                            pc.number_input(
+                                default_value=getattr(MethodState, arg.name),
+                                on_change=getattr(MethodState, f"set_{arg.name}"),
+                            )
+                        )
+                    case abi.AddressType() | abi.StringType():
+                        arg_inputs.append(
+                            pc.input(
+                                default_value=getattr(MethodState, arg.name),
+                                on_change=getattr(MethodState, f"set_{arg.name}"),
+                            )
+                        )
+                    case "axfer" | "pay":
+                        pass
+                    case "application" | "asset":
+                        pass
+                    case _:
+                        pass
 
             if method.returns is not None:
                 arg_inputs.append(
                     pc.box(
                         pc.text(getattr(MethodState, "result")),
+                        bg="lightgrey",
+                        padding="1em",
                         border_radius="1em",
-                        bg="gray",
                         border_color="black",
                     )
                 )
 
             action = pc.hstack(
-                *arg_inputs,
-                pc.button(
-                    method.name,
-                    border_radius="1em",
-                    on_click=getattr(MethodState, f"{method.name}_call"),
+                pc.box(pc.hstack(*arg_inputs), width="90%"),
+                pc.box(
+                    pc.button(
+                        method.name,
+                        border_radius="1em",
+                        on_click=getattr(MethodState, f"{method.name}_call"),
+                    ),
+                    width="10%",
                 ),
+                width="100%",
             )
 
             actions.append(action)
